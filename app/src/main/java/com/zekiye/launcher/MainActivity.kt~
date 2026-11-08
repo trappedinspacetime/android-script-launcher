@@ -4,18 +4,16 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
+import android.os.Environment
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : Activity() {
-    companion object {
-        private const val TAG = "ZEKIYE"
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -28,27 +26,24 @@ class MainActivity : Activity() {
             addView(tv)
         })
 
-        val sb = StringBuilder("Zekiye debug\n\n")
-        Log.d(TAG, "onCreate başladı")
+        val sb = StringBuilder()
+        val logFile = File(getExternalFilesDir(null), "zekiye-debug.txt")
+        val ts = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        sb.append("[$ts] Zekiye başladı\n\n")
 
         // 1. İzin kontrolü
         val granted = checkSelfPermission("com.termux.permission.RUN_COMMAND") ==
                 PackageManager.PERMISSION_GRANTED
         sb.append("RUN_COMMAND izni: ${if (granted) "✅" else "❌"}\n")
-        Log.d(TAG, "izin=$granted")
 
-        // 2. Termux kurulu mu?
-        val termuxInstalled = try {
-            packageManager.getPackageInfo("com.termux", 0); true
-        } catch (e: Exception) { false }
-        sb.append("Termux kurulu: ${if (termuxInstalled) "✅" else "❌"}\n")
-
-        if (!termuxInstalled) {
-            sb.append("\n⚠ Termux bulunamadı!")
-            tv.text = sb.toString()
-            Handler(Looper.getMainLooper()).postDelayed({ finish() }, 5000)
-            return
+        // 2. Termux kurulu mu / görünüyor mu?
+        val termuxInfo = try {
+            packageManager.getPackageInfo("com.termux", 0)
+            "✅ (${termuxInfo.versionName})"
+        } catch (e: Exception) {
+            "❌ GÖRÜNMÜYOR — <queries> eksik olabilir"
         }
+        sb.append("Termux görünürlüğü: $termuxInfo\n")
 
         // 3. Intent gönder
         val scriptPath = "/data/data/com.termux/files/home/.shortcuts/tasks/zekiye.sh"
@@ -64,18 +59,25 @@ class MainActivity : Activity() {
 
         try {
             val component = startService(intent)
-            Log.d(TAG, "startService=$component")
-            sb.append("Intent: ${if (component != null) "✅ gönderildi" else "❌ null döndü"}\n")
-            sb.append("\nScript: $scriptPath")
-            sb.append("\n\nYeniden yükleyip Termux'u aç, logcat'i kontrol et.")
-            Toast.makeText(this, "Komut gönderildi", Toast.LENGTH_SHORT).show()
+            sb.append("Intent sonucu: ${if (component != null) "✅ ${component.className}" else "❌ NULL (service başlatılamadı)"}\n")
+            Toast.makeText(this, "Gönderildi", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Log.e(TAG, "hata", e)
-            sb.append("\n❌ HATA: ${e.message}")
+            sb.append("❌ HATA: ${e.message}\n")
             Toast.makeText(this, "Hata: ${e.message}", Toast.LENGTH_LONG).show()
         }
 
+        sb.append("\nScript: $scriptPath")
+        sb.append("\nLog: ${logFile.absolutePath}")
+
+        // Dosyaya yaz
+        logFile.writeText(sb.toString())
+
+        // Ekranda da göster
         tv.text = sb.toString()
-        Handler(Looper.getMainLooper()).postDelayed({ finish() }, 4000)
+
+        // 5 saniye sonra kapan
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            finish()
+        }, 5000)
     }
 }
